@@ -26,6 +26,6 @@ app=create_app()
 
 if __name__=="__main__":
     import uvicorn
-    uvicorn.run("main:app",port=8080,host="localhost")
+    uvicorn.run("main:app", port=8080, host="127.0.0.1", reload=True)
     
     
