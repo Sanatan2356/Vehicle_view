@@ -11,8 +11,9 @@ class UserAuthentication(Base):
     email = Column(String(50), nullable=False, unique=True)  
     phoneno = Column(String(15), nullable=True)  
     password = Column(String(500), nullable=False)
+    confirm_password = Column(String(500),nullable=False)
     
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=False)
     is_admin = Column(Boolean, default=False)
     is_buyer = Column(Boolean, default=True)
 
@@ -25,7 +26,7 @@ class UserAuthentication(Base):
     gender = Column(String(10), nullable=True)
     
     profile_picture = Column(String, nullable=True)  
-    email_otp = Column(Integer, nullable=True)
+    otp = Column(Integer, nullable=True)
     otp_expiry = Column(DateTime, nullable=True)
    
     created_at = Column(DateTime(timezone=True), server_default=func.now())

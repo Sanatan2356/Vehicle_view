@@ -2,8 +2,8 @@ from fastapi import APIRouter,Depends,UploadFile,File,Query
 from typing import Optional
 from sqlalchemy.orm import Session
 from database import get_db
-from Schemas.auth_schemas import SignUp,SignIn,UpdateUserRequest
-from Viewer.auth_viewer import signup_user,signin_user,logout_user,password_forget,password_reset,user_update,user_view,user_list
+from Schemas.auth_schemas import SignUp,SignIn,UpdateUserRequest,VerifyMobile,LocationCreate
+from Viewer.auth_viewer import signup_user,signin_user,logout_user,password_forget,password_reset,location,user_update,user_view,user_list,mobile_verify
 
 user_route=APIRouter(tags=['Authentication'])
 
@@ -12,10 +12,20 @@ user_route=APIRouter(tags=['Authentication'])
 def user_signup(request_body:SignUp,db:Session=Depends(get_db)):
     return signup_user(request_body,db)
 
+
+@user_route.post("/verify_mobile")
+def verify_mobile(request_body:VerifyMobile,db:Session=Depends(get_db)):
+    return mobile_verify(request_body,db)
+
+
 @user_route.post("/user_signin")
 def user_signin(request_body:SignIn,db:Session=Depends(get_db)):
     return signin_user(request_body,db)
         
+@user_route.post("/add_location")
+def new_location(request_body:LocationCreate,db:Session=Depends(get_db)):
+    return location(request_body,db)
+
 @user_route.post("/user_logout")
 def uesr_logout(token:str,db:Session=Depends(get_db)):
     return logout_user(token,db)

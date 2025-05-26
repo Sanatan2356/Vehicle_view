@@ -39,7 +39,7 @@ def signup_user(request_body,db):
     an error message. Otherwise, it creates a new user record.
 
     Args:
-        request_body: User data (username, email, phone number, password).
+        request_body: User data (username, email, phone number, password,confirm_password).
         db: SQLAlchemy session object.
 
     Returns:
@@ -48,11 +48,11 @@ def signup_user(request_body,db):
     start_time = time.time()
     try:
 
-        # Check if the username already exists
-        user_exist=db.query(UserAuthentication).filter_by(username=request_body.username).first()
+        # # Check if the username already exists
+        # user_exist=db.query(UserAuthentication).filter_by(username=request_body.fullname).first()
     
-        if user_exist:
-            return {"status":409,"message":f"UserName '{request_body.username}' already exist."}
+        # if user_exist:
+        #     return {"status":409,"message":f"Full name '{request_body.fullname}' already exist."}
         # Check if the email already exists
         email_exist=db.query(UserAuthentication).filter_by(email=request_body.email).first()
         
@@ -65,21 +65,24 @@ def signup_user(request_body,db):
         if phoneno_exist:
             return {"status":409,"message":f"{request_body.phoneno} phone number already exist."}
         
+        if request_body.password != request_body.confirm_password:
+            return {'status':400,"message":"Password and confirm password do not match"}
+        
+        otp = str(random.randint(100000, 999999))
+        otp_expiry = datetime.utcnow() + timedelta(minutes=10)  # OTP valid for 10 mins
+        
         # Add the new user to the database
         new_user = UserAuthentication(
-            username=request_body.username,
+            username=request_body.fullname,
             email=request_body.email,
             phoneno=request_body.phoneno,
             is_buyer=request_body.is_buyer if request_body.is_buyer is not None else True,
-            address=request_body.address,
-            city=request_body.city,
-            state=request_body.state,
-            pincode=request_body.pincode,
-            country=request_body.country,
-            gender=request_body.gender,
-            is_active=True,
+            is_active=False,
+            otp=otp,
+            otp_expiry=otp_expiry,
             created_at=datetime.utcnow(),
-            password=hash_password(request_body.password)
+            password=hash_password(request_body.password),
+            confirm_password=hash_password(request_body.password)
         )
         db.add(new_user)
         db.commit()
@@ -87,60 +90,133 @@ def signup_user(request_body,db):
         
         end_time=time.time()
         total_time = end_time - start_time
+       
         return {
         "status_code": 201,
-        "message": f"User '{request_body.username}' created successfully. Time taken: {total_time:.4f} seconds."
+        "message": f"User '{request_body.fullname}' created successfully. Time taken: {total_time:.4f} seconds.",
+        'otp':otp
     }
     except Exception as e:
         print(e)
         db.rollback() 
         return {"status": 500, "message": "An error occurred while processing your request."}
 
+def mobile_verify(request_body,db):
+    try:
+        # Check if the phone number already exists
+        user=db.query(UserAuthentication).filter_by(phoneno=request_body.phoneno).first()
+        
+        if not user:
+            return {"status":404,"message":f"{request_body.phoneno} phone number not found."}
+      
+        if user.otp != int(request_body.otp):
+            return {'status_code':400, 'message':"Invalid OTP."}
 
-def signin_user(request_body,db):
+        if user.otp_expiry and user.otp_expiry < datetime.utcnow():
+            return {'status_code':400, 'message':"OTP has expired."}
+
+        
+        return {"status": 200, "message": "OTP Verified successfully."}
+    
+    except Exception as e:
+        print(e)
+        # logger.error(f"Error during password reset: {str(e)}")
+        return {'status_code':500, 'message':"Internal server error."}
+    
+
+    except Exception as e:
+        print(e)
+        db.rollback() 
+        return {"status": 500, "message": "An error occurred while processing your request."}
+    
+
+from datetime import datetime
+import random
+
+def generate_otp():
+    """Generate a 6-digit OTP"""
+    return str(random.randint(100000, 999999))
+
+def signin_user(request_body, db):
     """
-    Handles user sign-in by verifying email and password.
+    Handles user sign-in using email/password or phone/OTP.
     Args:
-        request_body: An object containing user credentials (email, password).
-        db: Database session for querying user data.
+        request_body: Object with email or phone and password/OTP.
+        db: Database session.
     Returns:
-        dict: A response containing status code and message.
+        dict: A response with status code and message.
     """
     try:
-        # 
-        user=db.query(UserAuthentication).filter_by(email=request_body.email).first()
-        if not user :
-           
-            return {
-                "status":404,
-                "message":f"Email:'{request_body.email}' not found."}
-        
-        password_verify=verify_password(user.password,request_body.password)
-        
-        # Verify the provided password
-        if password_verify:
-            user.last_login=datetime.utcnow()
+        user = None
+        # Email/password based login
+        if request_body.email:
+            user = db.query(UserAuthentication).filter_by(email=request_body.email).first()
+            if not user:
+                return {
+                    "status": 404,
+                    "message": f"Email '{request_body.email}' not found."
+                }
+
+            if not verify_password(user.password, request_body.password):
+                return {
+                    "status": 401,
+                    "message": "Incorrect password."
+                }
+
+            user.last_login = datetime.utcnow()
+            user.is_active=True
             db.commit()
-            data={'user_id':user.id ,'Username':user.username,'Email id':user.email,"Phone number":user.phoneno,'is_admin':user.is_admin}
-            token=create_access_token(data)
-            
-            token_entry=UserToken(user_id=user.id,token=token)
+
+            data = {
+                'user_id': user.id,
+                'Username': user.username,
+                'Email id': user.email,
+                'Phone number': user.phoneno,
+                'is_admin': user.is_admin
+            }
+            token = create_access_token(data)
+            token_entry = UserToken(user_id=user.id, token=token)
             db.add(token_entry)
             db.commit()
             db.refresh(token_entry)
+
             return {
-                'status':200,
-                "message":f"Login successfully for email:'{request_body.email}'.",
-                "data":{"access_token":token,"token_type":"Bearer"}
+                'status': 200,
+                'message': f"Login successful for email: {request_body.email}.",
+                'data': {"access_token": token, "token_type": "Bearer"}
+            }
+
+        # Phone-based login (OTP flow)
+        elif request_body.phone_number:
+            user = db.query(UserAuthentication).filter_by(phoneno=request_body.phone_number).first()
+            if not user:
+                return {
+                    "status": 404,
+                    "message": f"Phone number '{request_body.phone_number}' not found."
                 }
+
+            # Generate and (simulate) send OTP
+            otp = generate_otp()
+            user.otp = otp  # Assuming UserAuthentication has an 'otp' column
+            user.otp_generated_at = datetime.utcnow()
+            db.commit()
+
+            # Simulate sending OTP (for now just return in response)
+            return {
+                "status": 200,
+                "message": f"OTP sent to phone number {request_body.phone_number}.",
+                "otp": otp  #  Return only for testing. Don't expose in production!
+            }
+
         else:
             return {
-                "status":404,
-                "message":f"Incorrect Password '{request_body.password}'"
+                "status": 400,
+                "message": "Please provide either email or phone number."
             }
+
     except Exception as e:
         print(e)
-        return {"status": 500, "message": "An error occurred while processing your request."}
+        return {"status": 500, "message": "An internal error occurred."}
 
 
 def logout_user(token,db):
@@ -155,11 +231,21 @@ def logout_user(token,db):
         return {"status": 500, "message": "An error occurred while processing your request."}
     
     
-def password_forget(email: str, db):
+from typing import Optional
+
+def password_forget(email: Optional[str],phone_number:Optional[str], db):
     try:
         user = db.query(UserAuthentication).filter_by(email=email).first()
         if not user:
             return {'status_code':404, 'message':"User not found."}
+        
+        elif phone_number:
+            user = db.query(UserAuthentication).filter_by(phoneno=phone_number).first()
+            if not user:
+                return {
+                    "status": 404,
+                    "message": f"Phone number '{phone_number}' not found."
+                }
 
         otp = str(random.randint(100000, 999999))
         user.email_otp = otp
@@ -427,3 +513,47 @@ def user_list(token,page,page_size,db):
             'status_code': 500,
             'message': "An unexpected error occurred while retrieving user details."
         }
+
+
+def location(request_body, db) -> dict:
+    """
+    Updates location-related fields (address, city, state, pincode, country)
+    in the UserAuthentication model based on the provided phone number.
+
+    Args:
+        request_body (LocationCreate): Location data along with phone number.
+        db (Session): SQLAlchemy database session.
+
+    Returns:
+        dict: Response with status and message.
+    """
+    # Fetch user by phone number
+    user = db.query(UserAuthentication).filter_by(phoneno=request_body.phone_number).first()
+
+    if not user:
+        return {
+            "status": 404,
+            "message": f"Phone number '{request_body.phone_number}' not found."
+        }
+
+    # Update user location fields
+    location_fields = ['address', 'city', 'state', 'pincode', 'country']
+    updated_data = {}
+
+    for field in location_fields:
+        value = getattr(request_body, field, None)
+        if value is not None:
+            setattr(user, field, value)
+            updated_data[field] = value
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "status": 200,
+        "message": "User location updated successfully.",
+        "data": {
+            "user_id": user.id,
+            "updated_location": updated_data
+        }
+    }

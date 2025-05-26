@@ -3,22 +3,30 @@ from typing import Optional
 from datetime import datetime
 from fastapi import Form
 class SignUp(BaseModel):
-    username:str
+    fullname:str
     email:str
     phoneno:Optional[int]
     is_buyer:Optional[bool]
-    gender:Optional[str]
-    address:Optional[str]
-    city:Optional[str]
-    state:Optional[str]
-    pincode:Optional[str]   
-    country:Optional[str]
     password:str
-    
+    confirm_password:str
+
+class VerifyMobile(BaseModel):
+    phoneno:int
+    otp:str
+
+class LocationCreate(BaseModel):
+    phone_number:int
+    address: Optional[str]
+    city: Optional[str]
+    state: Optional[str]
+    pincode: Optional[str]
+    country: Optional[str]
+
 
 class SignIn(BaseModel):
-    email:str
-    password:str
+    email:Optional[str]
+    phone_number:Optional[int]
+    password:Optional[str]
 
 
 
